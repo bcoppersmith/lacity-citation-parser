@@ -45,7 +45,10 @@ def convert_time(row):
   ticket_time = normalize_ticket_time(raw_ticket_time)
   ticket_date = re.sub('\s\d\d:\d\d:\d\d [AP]M', '', raw_ticket_date)
   raw_timestamp = ticket_date + ' ' + ticket_time
-  timestamp = time.mktime(datetime.datetime.strptime(raw_timestamp, "%m/%d/%Y %H:%M").timetuple())
+  try:
+    timestamp = time.mktime(datetime.datetime.strptime(raw_timestamp, "%m/%d/%Y %H:%M").timetuple())
+  except ValueError, TypeError:
+    timestamp = "n/a"
   row['issue_time'] = timestamp
   return row
 
