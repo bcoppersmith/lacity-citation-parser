@@ -72,6 +72,14 @@ def process_row(writer, row):
   if is_valid_row(row):
     writer.writerow(row)
 
+def read_raw_tickets(raw_file):
+  csv_file = csv.DictReader(raw_file)
+  def add_column(csv_file):
+    for line in csv_file:
+      line["issue_timestamp"] = ""
+      yield line
+  return add_column(csv_file)
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", dest="filename",
                     required=True, help="Specify input CSV here.",
@@ -79,8 +87,8 @@ parser.add_argument("--input", dest="filename",
 
 args = parser.parse_args()
 
-with args.filename as csvfile:
-  citation_reader = csv.DictReader(csvfile)
+with args.filename as csv_file:
+  citation_reader = read_raw_tickets(csv_file)
   for line_number, line in enumerate(citation_reader, 1):
     line = dict((k.lower(), v) for k,v in line.iteritems())
     line = dict((k.replace(' ', '_'), v) for k,v in line.iteritems())
