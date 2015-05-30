@@ -32,7 +32,7 @@ def convert_geo(row):
   return row
 
 def normalize_ticket_time(raw_time):
-  ticket_time = "00:00"
+  ticket_time = "n/a"
   if len(raw_time) == 4:
     ticket_time = re.sub('(\d{2})(\d{2})$', '\\1:\\2', raw_time)
   elif len(raw_time) == 3:
@@ -50,6 +50,8 @@ def convert_time(row):
   except ValueError, TypeError:
     timestamp = "n/a"
   row['issue_timestamp'] = timestamp
+  row['issue_time'] = ticket_time
+  row['issue_date'] = ticket_date
   return row
 
 def is_valid_lat(lat):
