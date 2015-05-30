@@ -49,7 +49,7 @@ def convert_time(row):
     timestamp = time.mktime(datetime.datetime.strptime(raw_timestamp, "%m/%d/%Y %H:%M").timetuple())
   except ValueError, TypeError:
     timestamp = "n/a"
-  row['issue_time'] = timestamp
+  row['issue_timestamp'] = timestamp
   return row
 
 def is_valid_lat(lat):
