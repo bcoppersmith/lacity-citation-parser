@@ -1,100 +1,120 @@
 import argparse
 import csv
 import datetime
-import os.path
 import pyproj
 import re
-import sys
 import time
+import json
+from point_in_polygons import PointInPolygons
+from shapely.geometry import Point
+
+HEADER = [
+  "ticket_number",
+  "violation_description",
+  "violation_code",
+  "fine_amount",
+  "location",
+  "issue_date",
+  "issue_timestamp",
+  "issue_day_of_month",
+  "latitude",
+  "longitude",
+  "raw_meterid",
+  "meterid",
+  "meter_zone",
+  "neighborhood"
+]
+
+UNCHANGED_FIELDS = [
+  "Ticket number",
+  "Violation Description",
+  "Violation code",
+  "Fine amount",
+  "Location"
+]
 
 ESRI_PROJ = "+proj=lcc +lat_1=34.03333333333333 +lat_2=35.46666666666667 +lat_0=33.5 +lon_0=-118 +x_0=2000000 +y_0=500000.0000000002 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048006096012192 +no_defs"
 EPSG_PROJ = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 
-# Hand-curated boundaries from clicking around on maps.google.com
-SOUTHERN_BOUND = 33.695483
-NORTHERN_BOUND = 34.336338
-WESTERN_BOUND  = -118.531895
-EASTERN_BOUND  = -117.908421
-
-esri  = pyproj.Proj(ESRI_PROJ,preserve_units=True)
+esri  = pyproj.Proj(ESRI_PROJ, preserve_units = True)
 wgs84 = pyproj.Proj(EPSG_PROJ)
 
-def is_valid_file(parser, filepath):
-  if not os.path.exists(filepath):
-    parser.error("The file %s is not valid" % filepath)
+def convert_geo(geom):
+  return pyproj.transform(esri, wgs84, geom[0], geom[1])
+
+def augment_meter_id(meter_id, zone):
+  if re.match('^[0-9]+', meter_id):
+    return zone + meter_id
   else:
-    return open(filepath, 'r')
+    return meter_id
 
-def convert_geo(row):
-  raw_lat = row['latitude']
-  raw_lng = row['longitude']
-  row['longitude'], row['latitude'] = pyproj.transform(esri, wgs84, raw_lat, raw_lng)
-  return row
-
-def normalize_ticket_time(raw_time):
-  ticket_time = "n/a"
-  if len(raw_time) == 4:
-    ticket_time = re.sub('(\d{2})(\d{2})$', '\\1:\\2', raw_time)
-  elif len(raw_time) == 3:
-    ticket_time = re.sub('(\d{1})(\d{2})$', '0\\1:\\2', raw_time)
+def sanitize_time(time):
+  ticket_time = ""
+  if len(time) == 4:
+    ticket_time = re.sub('(\d{2})(\d{2})$', '\\1:\\2', time)
+  elif len(time) == 3:
+    ticket_time = re.sub('(\d{1})(\d{2})$', '0\\1:\\2', time)
   return ticket_time
 
-def convert_time(row):
-  raw_ticket_time = row['issue_time']
-  raw_ticket_date = row['issue_date']
-  ticket_time = normalize_ticket_time(raw_ticket_time)
-  ticket_date = re.sub('\s\d\d:\d\d:\d\d [AP]M', '', raw_ticket_date)
-  raw_timestamp = ticket_date + ' ' + ticket_time
+def sanitize_date(date):
+  return re.sub('\s\d\d:\d\d:\d\d [AP]M', '', date)
+
+def generate_timestamp(date, time_of_day):
+  raw_timestamp = date + ' ' + time_of_day
   try:
-    timestamp = time.mktime(datetime.datetime.strptime(raw_timestamp, "%m/%d/%Y %H:%M").timetuple())
-  except ValueError, TypeError:
-    timestamp = "n/a"
-  row['issue_timestamp'] = timestamp
-  row['issue_time'] = ticket_time
-  row['issue_date'] = ticket_date
-  return row
+    return int(time.mktime(datetime.datetime.strptime(raw_timestamp, "%m/%d/%Y %H:%M").timetuple()))
+  except ValueError:
+    return ""
 
-def is_valid_lat(lat):
-  return float(lat) >= SOUTHERN_BOUND and float(lat) <= NORTHERN_BOUND
-
-def is_valid_lng(lng):
-  return float(lng) >= WESTERN_BOUND and float(lng) <= EASTERN_BOUND
-
-def has_violation_description(desc):
-  return desc is not None
-
-def is_valid_row(row):
-  return is_valid_lat(row['latitude']) and \
-         is_valid_lng(row['longitude']) and \
-         has_violation_description(row['violation_description'])
-
-def process_row(writer, row):
-  row = convert_geo(row)
-  row = convert_time(row)
-  if is_valid_row(row):
-    writer.writerow(row)
-
-def read_raw_tickets(raw_file):
-  csv_file = csv.DictReader(raw_file)
-  def add_column(csv_file):
-    for line in csv_file:
-      line["issue_timestamp"] = ""
-      yield line
-  return add_column(csv_file)
+def grab_day_of_month(date):
+  return re.sub('\d{2}\/(\d{2})\/\d{4}', '\\1', date)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--input", dest="filename",
-                    required=True, help="Specify input CSV here.",
-                    metavar="FILE", type=lambda filepath: is_valid_file(parser, filepath))
+
+parser.add_argument(
+  "--citations", dest="citations", required=True,
+  help="Specify citation data here.", metavar="FILE"
+)
+
+parser.add_argument(
+  "--neighborhoods", dest="neighborhoods_geojson", required=True,
+  help="Specify the neighborhoods geoJSON file here.", metavar="FILE"
+)
+
+parser.add_argument(
+  "--meters", dest="meter_zone_geojson", required=True,
+  help="Specify the meter zones geoJSON file here.", metavar="FILE"
+)
 
 args = parser.parse_args()
 
-with args.filename as csv_file:
-  citation_reader = read_raw_tickets(csv_file)
-  for line_number, line in enumerate(citation_reader, 1):
-    line = dict((k.lower(), v) for k,v in line.iteritems())
-    line = dict((k.replace(' ', '_'), v) for k,v in line.iteritems())
-    w    = csv.DictWriter(sys.stdout, line.keys())
-    if line_number == 1:
-      w.writeheader()
-    process_row(w, line)
+neighborhoods = PointInPolygons(args.neighborhoods_geojson, 'name')
+meter_zones = PointInPolygons(args.meter_zone_geojson, 'PMZ_CODE')
+
+print "	".join(HEADER)
+
+citations = open(args.citations)
+reader = csv.DictReader(citations)
+for row in reader:
+  output = map(lambda field: row[field], UNCHANGED_FIELDS)
+
+  date = sanitize_date(row['Issue Date'])
+  time_of_day = sanitize_time(row['Issue time'])
+  timestamp = generate_timestamp(date, time_of_day)
+  day_of_month = grab_day_of_month(date)
+  output.extend([date, timestamp, day_of_month])
+
+  geometry = convert_geo([row['Latitude'], row['Longitude']])
+  point = Point(geometry)
+
+  raw_meter_id = row['Meter Id']
+
+  neighborhood = neighborhoods.search(point)
+  meter_zone = meter_zones.search(point)
+  meter_id = augment_meter_id(raw_meter_id, meter_zone)
+
+  output.extend([geometry[1], geometry[0], raw_meter_id, meter_id, meter_zone, neighborhood])
+
+  print '	'.join(str(field) for field in output)
+
+citations.close()
