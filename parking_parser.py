@@ -91,7 +91,7 @@ args = parser.parse_args()
 neighborhoods = PointInPolygons(args.neighborhoods_geojson, 'name')
 meter_zones = PointInPolygons(args.meter_zone_geojson, 'PMZ_CODE')
 
-print "	".join(HEADER)
+print "\t".join(HEADER)
 
 citations = open(args.citations)
 reader = csv.DictReader(citations)
