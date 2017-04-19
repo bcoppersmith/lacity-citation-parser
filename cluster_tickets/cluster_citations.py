@@ -65,4 +65,4 @@ for n in range(num_clusters):
   })
 
 sys.stderr.write('Estimated number of clusters: %d\n' % num_clusters)
-sys.stderr.write('Estimated number of clustered tickets: %d\n' % len(cluster_labels))
+sys.stderr.write('Number of clustered tickets: %d\n' % len(cluster_labels))
