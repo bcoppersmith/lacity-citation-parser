@@ -16,7 +16,7 @@ or
 python parking_parser.py --help
 ```
 ## Where to get the Data
-* City of LA Parking Tickets: https://data.lacity.org/A-Well-Run-City/Parking-Citations/t4h6-r362
+* City of LA Parking Tickets: https://data.lacity.org/A-Well-Run-City/Parking-Citations/wjz9-h9np
 * City of LA Meter Zones: http://geohub.lacity.org/datasets/71c26db1ad614faab1047cc8c3686ece_28
 * LA Times Neighborhood Polygons: http://boundaries.latimes.com/sets/
 
